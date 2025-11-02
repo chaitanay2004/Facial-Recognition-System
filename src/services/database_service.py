@@ -4,6 +4,7 @@ from typing import Optional
 from config import Config
 import bcrypt
 from datetime import datetime
+from bson import ObjectId
 
 class DatabaseService:
     def __init__(self):
@@ -57,6 +58,54 @@ class DatabaseService:
         except Exception as e:
             print(f"Error getting user: {e}")
             return None
+
+    # NEW METHOD FOR ADMIN AUTHENTICATION
+    def get_user_by_id(self, user_id: str) -> Optional[FacialUser]:
+        """Get user by MongoDB ID for admin authentication"""
+        try:
+            user_data = self.facial_users.find_one({"_id": ObjectId(user_id)})
+            if user_data:
+                return FacialUser(**user_data)
+            return None
+        except Exception as e:
+            print(f"Error getting user by ID: {e}")
+            return None
+
+    # NEW METHOD TO GET ALL USERS FOR ADMIN
+    def get_all_users(self) -> list:
+        """Get all users for admin dashboard"""
+        try:
+            users_data = self.facial_users.find({}, {
+                "username": 1,
+                "email": 1,
+                "image_data": 1,
+                "facial_embedding": 1,
+                "created_at": 1
+            })
+            
+            users = []
+            for user_data in users_data:
+                # Convert ObjectId to string for JSON serialization
+                user_data["_id"] = str(user_data["_id"])
+                users.append(user_data)
+            
+            return users
+        except Exception as e:
+            print(f"Error getting all users: {e}")
+            return []
+
+    # NEW METHOD TO CHECK IF USER HAS FACIAL DATA
+    def user_has_facial_data(self, user_id: str) -> bool:
+        """Check if user has facial data stored"""
+        try:
+            user_data = self.facial_users.find_one(
+                {"_id": ObjectId(user_id)}, 
+                {"image_data": 1}
+            )
+            return user_data and user_data.get("image_data") is not None
+        except Exception as e:
+            print(f"Error checking facial data: {e}")
+            return False
     
     def update_facial_embedding(self, username: str, embedding: list, image_data: str) -> bool:
         """Update facial embedding for user"""

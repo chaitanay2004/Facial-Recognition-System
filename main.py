@@ -6,7 +6,8 @@ from config import Config
 app = FastAPI(
     title="Facial Authentication System",
     description="Standalone facial recognition system for Accessly",
-    version="1.0.0"
+    version="1.0.0",
+    max_upload_size=10 * 1024 * 1024  # 10MB
 )
 
 # CORS middleware
@@ -18,10 +19,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routes
+# FIX: Change the prefix to match what Node.js is calling
 app.include_router(
     facial_auth_router, 
-    prefix="/api/v1/facial-auth", 
+    prefix="/api",  # Changed from "/api/v1/facial-auth"
     tags=["Facial Authentication"]
 )
 

@@ -186,3 +186,114 @@ class FacialRecognitionService:
         except Exception as e:
             print(f"Error drawing verification result: {e}")
             return b''
+
+    # NEW METHOD FOR ADMIN AUTHENTICATION
+    def capture_live_image_for_admin(self) -> Tuple[Optional[str], Optional[List[float]]]:
+        """Capture live image for admin authentication and return base64"""
+        try:
+            cap = cv2.VideoCapture(0)
+            
+            if not cap.isOpened():
+                print("Error: Could not open webcam")
+                return None, None
+            
+            print("Admin Authentication - Looking for face... Press SPACE to capture, Q to quit")
+            captured_base64 = None
+            face_coords = None
+            
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # Convert to grayscale for face detection
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                
+                # Detect faces
+                faces = self.face_cascade.detectMultiScale(
+                    gray, 
+                    scaleFactor=1.1, 
+                    minNeighbors=5, 
+                    minSize=(30, 30)
+                )
+                
+                # Draw face bounding box if face detected
+                display_frame = frame.copy()
+                if len(faces) > 0:
+                    x, y, w, h = faces[0]
+                    cv2.rectangle(display_frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                    cv2.putText(display_frame, "Face Detected! Press SPACE", (x, y-10), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                else:
+                    cv2.putText(display_frame, "No Face Detected", (50, 50), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                
+                # Add admin-specific instructions
+                cv2.putText(display_frame, "ADMIN AUTHENTICATION", (10, 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                cv2.putText(display_frame, "Press SPACE to capture face", (10, 60), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(display_frame, "Press Q to quit", (10, 90), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                
+                cv2.imshow('Admin Authentication - Capture Face', display_frame)
+                
+                key = cv2.waitKey(1) & 0xFF
+                
+                if key == ord(' '):  # SPACE to capture
+                    if len(faces) > 0:
+                        # Encode the frame as base64
+                        success, buffer = cv2.imencode('.jpg', frame)
+                        if success:
+                            captured_base64 = base64.b64encode(buffer).decode('utf-8')
+                            x, y, w, h = faces[0]
+                            face_coords = [float(x), float(y), float(w), float(h)]
+                            print("Admin authentication face captured successfully!")
+                        break
+                    else:
+                        print("No face detected! Please position face properly.")
+                
+                elif key == ord('q'):  # Q to quit
+                    print("Admin authentication cancelled")
+                    break
+            
+            cap.release()
+            cv2.destroyAllWindows()
+            return captured_base64, face_coords
+            
+        except Exception as e:
+            print(f"Error capturing admin authentication face: {e}")
+            return None, None
+
+    def get_confidence_score(self, stored_embedding: List[float], live_embedding: List[float]) -> float:
+        """Calculate confidence score for face verification"""
+        try:
+            if not stored_embedding or not live_embedding:
+                return 0.0
+            
+            # Calculate area similarity
+            stored_area = stored_embedding[2] * stored_embedding[3]
+            live_area = live_embedding[2] * live_embedding[3]
+            area_ratio = min(stored_area, live_area) / max(stored_area, live_area)
+            
+            # Calculate position similarity (normalized)
+            height, width = 480, 640  # Assuming standard webcam resolution
+            stored_center_x = stored_embedding[0] + stored_embedding[2]/2
+            stored_center_y = stored_embedding[1] + stored_embedding[3]/2
+            live_center_x = live_embedding[0] + live_embedding[2]/2
+            live_center_y = live_embedding[1] + live_embedding[3]/2
+            
+            position_diff = np.sqrt(
+                (stored_center_x - live_center_x)**2 + 
+                (stored_center_y - live_center_y)**2
+            )
+            max_possible_diff = np.sqrt(width**2 + height**2)
+            position_similarity = 1.0 - (position_diff / max_possible_diff)
+            
+            # Combined confidence score
+            confidence = (area_ratio + position_similarity) / 2.0
+            return round(confidence * 100, 2)  # Return as percentage
+            
+        except Exception as e:
+            print(f"Error calculating confidence score: {e}")
+            return 0.0
